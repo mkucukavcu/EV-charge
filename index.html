@@ -1,12 +1,729 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="utf-8">
-<title>EV-CHARGE</title>
-<meta http-equiv="refresh" content="0; url=TASLAK_3.html">
-<link rel="canonical" href="TASLAK_3.html">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<title>EV-CHARGE — Taslak 3 (Google Maps, v4)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google Maps JS API with Places & Geometry (async + callback) -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCXkpSfbkBNsfKbYWqUZGTbss_NvNLBIWc&libraries=places,geometry&callback=initMap&libraries=places,geometry&callback=initMap" async defer></script>
+
+<style>
+  html, body {height:100%; margin:0; font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;}
+  .layout {grid-template-columns:380px 1fr;}
+  #map {width:100%; height:100%; min-height:640px; border-radius:1.25rem;}
+  .accordion-content{display:none}
+  .accordion.open .accordion-content{display:block}
+  .acc-btn{width:100%; display:flex; align-items:center; justify-content:space-between; padding:.75rem 1rem}
+  .map-wrap{position:relative}
+  .map-toolbar{position:absolute;top:.5rem;right:.5rem;z-index:1000;display:flex;gap:.5rem}
+  .map-panel{position:absolute;top:3.2rem;right:.5rem;z-index:1200;min-width:280px}
+  .hidden{display:none}
+  /* Places Autocomplete dropdown en üstte kalsın */
+  .pac-container { z-index: 10000 !important; pointer-events: auto; }
+  .pac-item { cursor: pointer; }
+  /* Sol panelin harita üstünde kalması için */
+  .sidebar { position: relative; z-index: 2000; }
+
+  gmpx-place-autocomplete { position: relative; z-index: 10000; display:block; }
+</style>
+<style>
+/* Sliderları kutu yerine gerçek kaydırıcı yap */
+input[type=range] {
+  -webkit-appearance: slider-horizontal;
+  appearance: slider-horizontal;
+  background: transparent;
+  height: 6px;
+  cursor: pointer;
+}
+
+  gmpx-place-autocomplete { position: relative; z-index: 10000; display:block; }
+</style>  <script type="module" src="https://unpkg.com/@googlemaps/extended-component-library@0.6"></script>
+  <gmpx-api-loader key="AIzaSyCXkpSfbkBNsfKbYWqUZGTbss_NvNLBIWc" solution-channel="GMP_QB_autocomplete_v1"></gmpx-api-loader>
 </head>
-<body>
-<p>Yönlendiriliyor… Eğer otomatik yönlenmezse <a href="TASLAK_3.html">buraya tıkla</a>.</p>
+<body class="bg-slate-950 text-slate-100">
+<div class="max-w-screen-2xl mx-auto h-[100dvh] md:h-screen grid grid-rows-[auto,1fr] gap-3 p-3">
+<!-- Header -->
+<header class="flex items-center justify-between bg-slate-900/60 backdrop-blur rounded-2xl p-3 shadow">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 grid place-items-center text-slate-900 font-extrabold">EV</div>
+    <div>
+      <h1 class="text-lg md:text-xl font-semibold tracking-wide">EV-CHARGE</h1>
+      <p class="text-xs text-slate-400">Harita sabit • Şarj hesaplayıcıları • Rota &amp; uyarılar • Marka filtreleri</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button class="px-3 py-2 rounded-xl bg-slate-800 text-sm hover:bg-slate-700 transition" id="btnLayers">Şarj İstasyonları</button>
+  </div>
+</header>
+
+<main class="grid layout gap-3 min-h-0">
+<!-- Sol Panel (dikey akordeon) -->
+<section class="sidebar bg-slate-900/60 backdrop-blur rounded-2xl p-3 flex flex-col gap-3 min-h-0 overflow-y-auto">
+  <!-- EV Şarj -->
+  <div class="accordion open bg-slate-800/60 rounded-xl">
+    <button class="acc-btn" data-acc-toggle="">
+      <span class="font-semibold">EV Şarj</span>
+      <svg class="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
+    </button>
+    <div class="accordion-content px-4 pb-4 space-y-3">
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-sm text-slate-300">Başlangıç % <span class="ml-2 text-xs text-slate-400" id="ecStartVal">%20</span>
+          <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="ecStartSoc" type="range" min="0" max="100" step="1" value="20"/>
+        </label>
+        <label class="text-sm text-slate-300">Bitiş % <span class="ml-2 text-xs text-slate-400" id="ecTargetVal">%80</span>
+          <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="ecTargetSoc" type="range" min="0" max="100" step="1" value="80"/>
+        </label>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-sm text-slate-300">Priz Tipi
+          <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="ecPower">
+            <option value="1.8">1.8 kW</option>
+            <option value="2.5">2.5 kW</option>
+            <option value="3.2">3.2 kW</option>
+            <option value="7.5">7.5 kW</option>
+            <option value="22">22 kW</option>
+          </select>
+        </label>
+        <label class="text-sm text-slate-300">kWh Ücreti
+          <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="ecPrice">
+            <option value="3.56">3,56 TL</option>
+            <option value="7.12">7,12 TL</option>
+          </select>
+        </label>
+      </div>
+      <label class="text-sm text-slate-300">Şarj Başlama Saati
+        <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="ecStartTime" type="time"/>
+      </label>
+      <button class="w-full py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-900 font-semibold" id="calcECBtn">Hesapla</button>
+      <div class="text-sm text-slate-200 bg-slate-800 rounded-xl p-3" id="ecOut">
+        <div><span class="text-slate-400">Kapasite (otomatik):</span> <b id="ecCap">44.00</b> kWh</div>
+        <div><span class="text-slate-400">Gerekli Enerji:</span> <b id="ecEnergy">–</b> kWh</div>
+        <div><span class="text-slate-400">Tahmini Süre:</span> <b id="ecTime">–</b></div>
+        <div><span class="text-slate-400">Tahmini Bitiş Saati:</span> <b id="ecEndTime">–</b></div>
+        <div><span class="text-slate-400">Tahmini Tutar:</span> <b id="ecCost">–</b> ₺</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Genel Hesaplayıcı (tahmini süre kaldırıldı) -->
+  <div class="accordion bg-slate-800/60 rounded-xl">
+    <button class="acc-btn" data-acc-toggle="">
+      <span class="font-semibold">Genel Hesaplayıcı</span>
+      <svg class="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
+    </button>
+    <div class="accordion-content px-4 pb-4 space-y-3">
+      <label class="text-sm text-slate-300">Araç Markası / Modeli
+        <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="vehicleSelect"></select>
+        <div class="mt-2">
+          <label class="text-sm text-slate-300">Şarj İstasyonu (Marka)</label>
+          <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="stationBrand"></select>
+        </div>
+        <div class="mt-2">
+          <label class="text-sm text-slate-300">Güç (kW)</label>
+          <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="stationPower"></select>
+        </div>
+      </label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-sm text-slate-300">Başlangıç % <span class="ml-2 text-xs text-slate-400" id="socStartVal">%0</span>
+          <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="socStart" type="range" min="0" max="100" step="1"/>
+        </label>
+        <label class="text-sm text-slate-300">Bitiş % <span class="ml-2 text-xs text-slate-400" id="socTargetVal">%0</span>
+          <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="socTarget" type="range" min="0" max="100" step="1"/>
+        </label>
+      </div>
+      <label class="text-sm text-slate-300">kWh Ücreti (₺)
+        <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="price" type="number" step="0.01"/>
+        <button class="ml-2 px-2 py-1 rounded bg-slate-700 text-white text-xs" id="priceLock">🔒</button>
+      </label>
+      <button class="w-full py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-900 font-semibold" id="calcBtn">Hesapla</button>
+      <div class="text-sm text-slate-200 bg-slate-800 rounded-xl p-3" id="calcOut">
+        <div><span class="text-slate-400">Seçilen Kapasite:</span> <b id="outCap">–</b> kWh</div>
+        <div><span class="text-slate-400">Gerekli Enerji:</span> <b id="outEnergy">–</b> kWh</div>
+        <div><span class="text-slate-400">Tahmini Tutar:</span> <b id="outCost">–</b> ₺</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KM–kWh Hesaplama -->
+  <div class="accordion bg-slate-800/60 rounded-xl">
+    <button class="acc-btn" data-acc-toggle="">
+      <span class="font-semibold">KM–kWh Hesaplama</span>
+      <svg class="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
+    </button>
+    <div class="accordion-content px-4 pb-4 space-y-3">
+      <label class="text-sm text-slate-300">Araç Markası / Modeli
+        <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="vehicleSelectKm"></select>
+      </label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="text-sm text-slate-300">kWh Ücreti (₺)
+          <select class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="kmPrice">
+            <option>3.56</option><option>7.12</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option>
+          </select>
+        </label>
+        <label class="text-sm text-slate-300">Yüzde Kullanım (0–100)
+          <input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="kmPercent" type="range" min="0" max="100" step="1" value="33"/>
+          <span class="ml-2 text-xs text-slate-400" id="kmPercentVal">%0</span>
+        </label>
+      </div>
+      <button class="w-full py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-900 font-semibold" id="calcKmBtn">Hesapla</button>
+      <div class="text-sm text-slate-200 bg-slate-800 rounded-xl p-3 space-y-1" id="kmOut">
+        <div><span class="text-slate-400">%1 başına kWh:</span> <b id="kmPer1kWh">–</b> kWh</div>
+        <div><span class="text-slate-400">%1 başına TL:</span> <b id="kmPer1TL">–</b> ₺</div>
+        <div><span class="text-slate-400">%1 başına km (WLTP):</span> <b id="kmPer1KM">–</b> km</div>
+        <hr class="border-slate-700 my-2"/>
+        <div><span class="text-slate-400">%<span id="kmUsedLabel">–</span> için Enerji:</span> <b id="kmUsedKWh">–</b> kWh</div>
+        <div><span class="text-slate-400">%<span id="kmUsedLabel2">–</span> için Tutar:</span> <b id="kmUsedTL">–</b> ₺</div>
+        <div><span class="text-slate-400">%<span id="kmUsedLabel3">–</span> için Mesafe (WLTP):</span> <b id="kmUsedKM">–</b> km</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rota (Google Maps ile) -->
+  <div class="accordion bg-slate-800/60 rounded-xl">
+    <button class="acc-btn" data-acc-toggle="">
+      <span class="font-semibold">Rota</span>
+      <svg class="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-linecap="round" stroke-width="2"/></svg>
+    </button>
+    <div class="accordion-content px-4 pb-4 space-y-3">
+      <div class="mt-2">
+        <label class="text-sm text-slate-300">Başlangıç %<span class="ml-2 text-xs text-slate-400" id="routeStartVal">%0</span></label>
+        <input class="w-full" id="routeStart" type="range" min="0" max="100" step="1"/>
+      </div>
+      <div class="mt-2">
+        <label class="text-sm text-slate-300">Varış %<span class="ml-2 text-xs text-slate-400" id="routeEndVal">%0</span></label>
+        <input class="w-full" id="routeEnd" type="range" min="0" max="100" step="1"/>
+      </div>
+      <div class="grid grid-cols-1 gap-2">
+        <label class="text-sm text-slate-300">Başlangıç</label>
+<input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="routeFrom" type="text" />
+        <label class="text-sm text-slate-300">Bitiş</label>
+<input class="mt-1 w-full px-3 py-2 rounded-xl bg-slate-800 outline-none" id="routeTo" type="text" />
+
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="flex items-end gap-2">
+          <button class="flex-1 py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-900 font-semibold" id="btnRoute">Rota Oluştur</button>
+          <button class="px-3 py-2 rounded-xl bg-slate-700 text-slate-100" id="btnClear">Temizle</button>
+        </div>
+      </div>
+      <div class="mt-2">
+        <label class="text-sm text-slate-300">Batarya Alt Sınırı <span class="ml-2 text-xs text-slate-400" id="batteryFloorVal">%0</span></label>
+        <input class="w-full" id="batteryFloor" type="range" min="0" max="100" step="5"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rota Uyarıları kutusu -->
+  <div class="bg-slate-800/60 rounded-xl p-3">
+    <div class="text-sm font-semibold mb-2">Rota Uyarıları</div>
+    <div class="text-sm text-slate-200 space-y-1" id="routeAlerts">
+      <div class="text-slate-400">Uyarı yok.</div>
+    </div>
+  </div>
+</section>
+
+<!-- Sağ: Harita sabit + modern marka paneli -->
+<section class="min-h-0 flex flex-col gap-3">
+  <div class="map-wrap rounded-2xl overflow-hidden">
+    <div class="map-toolbar">
+      <div class="map-panel hidden" id="layerPanel">
+        <div class="bg-slate-900/95 backdrop-blur rounded-2xl p-3 shadow-xl space-y-3 w-72 border border-slate-800">
+          <div class="flex items-center justify-between">
+            <div class="font-semibold text-sm flex items-center gap-2">
+              <span class="inline-flex w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Şarj İstasyonları
+            </div>
+            <div class="flex items-center gap-1">
+              <button id="btnAll" class="text-[11px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700">Tümünü Seç</button>
+              <button id="btnNone" class="text-[11px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700">Temizle</button>
+            </div>
+          </div>
+          <div>
+            <input id="brandSearch" class="w-full px-3 py-2 rounded-xl bg-slate-800 outline-none text-sm" placeholder="Marka ara…"/>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="pillAC" class="px-2.5 py-1.5 text-xs rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-300">AC</button>
+            <button id="pillDC" class="px-2.5 py-1.5 text-xs rounded-full bg-cyan-500/20 border border-cyan-400 text-cyan-300">DC</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-sm max-h-56 overflow-auto pr-1" id="brandList"></div>
+          <p class="text-[11px] text-slate-400">Not: Nokta verisi bir sonraki aşamada eklenecek.</p>
+        </div>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+</section>
+</main>
+</div>
+
+<script>
+window.window.chargeMarkers = window.window.chargeMarkers || [];
+window.startMarker = window.startMarker || null;
+window.endMarker = window.endMarker || null;
+// ========= Yardımcılar =========
+const WLTP_FACTOR = 17/20; // WLTP menzilini revize et (17->20 kWh/100km)
+const money = n => (isFinite(n)? Number(n).toFixed(2) : '–');
+const pad = n => n.toString().padStart(2,'0');
+const slugTR = s => (s||'').toLowerCase()
+  .replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g')
+  .replace(/ö/g,'o').replace(/ç/g,'c').replace(/ü/g,'u')
+  .replace(/\\s+/g,'').replace(/[^a-z0-9]/g,'');
+
+// ========= Akordeon =========
+document.addEventListener('click',(e)=>{
+  const b = e.target.closest('[data-acc-toggle]'); if(!b) return;
+  const acc = b.closest('.accordion'); if(!acc) return;
+  acc.classList.toggle('open');
+});
+
+// ========= Araç veri seti =========
+const VEHICLES = [
+  {make:'Citroën', model:'ë-C3', capacity:44, wltp:320},
+  {make:'Togg', model:'T10X LR', capacity:88.5, wltp:523},
+  {make:'Hyundai', model:'Kona Long Range', capacity:65.4, wltp:514},
+  {make:'Tesla', model:'Model 3 RWD', capacity:57.5, wltp:513},
+  {make:'Renault', model:'Megane E-Tech EV60', capacity:60, wltp:454},
+  {make:'Opel', model:'Corsa-e', capacity:51, wltp:357},
+  {make:'Peugeot', model:'e-208', capacity:51, wltp:410},
+  {make:'BYD', model:'Atto 3', capacity:60.5, wltp:420},
+  {make:'Volvo', model:'EX30', capacity:64, wltp:476},
+  {make:'Fiat', model:'500e', capacity:42, wltp:320},
+  {make:'Kia', model:'EV3', capacity:81, wltp:600},
+];
+
+const vehicleSelect = document.getElementById('vehicleSelect');
+const vehicleSelectKm = document.getElementById('vehicleSelectKm');
+function fillVehicles(sel){
+  sel.innerHTML = '<option value=\"\">Araç seçin…</option>' + VEHICLES.map((v,i)=>`<option value=\"${i}\">${v.make} ${v.model} — ${v.capacity} kWh</option>`).join('');
+}
+fillVehicles(vehicleSelect);
+fillVehicles(vehicleSelectKm);
+
+let CURRENT_CAPACITY = 44;
+let CURRENT_WLTP = 320;
+vehicleSelect.addEventListener('change',()=>{
+  const idx = vehicleSelect.value!==''? parseInt(vehicleSelect.value,10):-1;
+  if(idx>=0){
+    CURRENT_CAPACITY = Number(VEHICLES[idx].capacity);
+    CURRENT_WLTP = Number(VEHICLES[idx].wltp);
+    document.getElementById('ecCap').textContent = CURRENT_CAPACITY.toFixed(2);
+  }
+});
+
+// ========= Genel Hesaplayıcı =========
+document.getElementById('calcBtn').addEventListener('click',()=>{
+  const idx = vehicleSelect.value!==''? parseInt(vehicleSelect.value,10):-1;
+  if(idx<0){ alert('Lütfen bir araç seçin'); return; }
+  const cap = Number(VEHICLES[idx].capacity);
+  const s = parseFloat(document.getElementById('socStart').value);
+  const t = parseFloat(document.getElementById('socTarget').value);
+  const price = parseFloat(document.getElementById('price').value);
+  if([s,t].some(v=>isNaN(v))){ alert('Başlangıç/Bitiş yüzdesi girin'); return; }
+  const energy = cap*(t - s)/100;
+  if(energy < 0){ alert('Bitiş %, başlangıçtan büyük olmalı'); return; }
+  document.getElementById('outCap').textContent = money(cap);
+  document.getElementById('outEnergy').textContent = money(energy);
+  document.getElementById('outCost').textContent = isNaN(price)? '–' : money(energy*price);
+});
+
+// ========= EV Şarj Hesabı =========
+document.getElementById('calcECBtn').addEventListener('click',()=>{
+  const cap = CURRENT_CAPACITY;
+  const power = parseFloat(document.getElementById('ecPower').value);
+  const s = parseFloat(document.getElementById('ecStartSoc').value);
+  const t = parseFloat(document.getElementById('ecTargetSoc').value);
+  const price = parseFloat(document.getElementById('ecPrice').value);
+  const startTime = document.getElementById('ecStartTime').value;
+  if(!startTime || [power,s,t].some(v=>isNaN(v))){ alert('Eksik değer'); return; }
+  const energy = (cap)*(t - s)/100;
+  if(energy < 0){ alert('Bitiş %, başlangıçtan büyük olmalı'); return; }
+  const hours = energy / power;
+  const mins = Math.round(hours * 60);
+  document.getElementById('ecEnergy').textContent = money(energy);
+  document.getElementById('ecTime').textContent = `${Math.floor(mins/60)} sa ${mins%60} dk`;
+  const [h,m] = startTime.split(':').map(Number);
+  const end = new Date(); end.setHours(h); end.setMinutes(m); end.setMinutes(end.getMinutes()+mins);
+  document.getElementById('ecEndTime').textContent = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  document.getElementById('ecCost').textContent = money(energy * (isNaN(price)? 0 : price));
+});
+
+// ========= KM–kWh Hesaplama =========
+document.getElementById('calcKmBtn').addEventListener('click',()=>{
+  const idx = vehicleSelectKm.value!==''? parseInt(vehicleSelectKm.value,10):-1;
+  if(idx<0){ alert('Lütfen bir araç seçin'); return; }
+  const cap = Number(VEHICLES[idx].capacity);
+  const wltp = Number(VEHICLES[idx].wltp || 0);
+  const price = Number(document.getElementById('kmPrice').value);
+  const pct = Number(document.getElementById('kmPercent').value);
+  if(isNaN(pct) || pct<0 || pct>100){ alert('Lütfen 0-100 arası bir yüzde girin'); return; }
+
+  // %1 başına değerler
+  const per1kWh = cap/100;
+  const per1TL = per1kWh * price;
+  const per1KM = wltp? ((wltp*WLTP_FACTOR)/100) : NaN;
+
+  // Kullanıcı yüzdesi
+  const usedKWh = cap * (pct/100);
+  const usedTL = usedKWh * price;
+  const usedKM = wltp? ((wltp*WLTP_FACTOR) * (pct/100)) : NaN;
+
+  // Yazdır
+  document.getElementById('kmPer1kWh').textContent = money(per1kWh);
+  document.getElementById('kmPer1TL').textContent = money(per1TL);
+  document.getElementById('kmPer1KM').textContent = isFinite(per1KM)? per1KM.toFixed(1) : '–';
+
+  document.getElementById('kmUsedLabel').textContent = pct;
+  document.getElementById('kmUsedLabel2').textContent = pct;
+  document.getElementById('kmUsedLabel3').textContent = pct;
+  document.getElementById('kmUsedKWh').textContent = money(usedKWh);
+  document.getElementById('kmUsedTL').textContent = money(usedTL);
+  document.getElementById('kmUsedKM').textContent = isFinite(usedKM)? usedKM.toFixed(1) : '–';
+});
+
+// ========= Google Maps Harita =========
+let map, directionsService, directionsRenderer, safePtMarker = null, startMarker = null, endMarker = null;
+function initMap(){
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 38.4189, lng: 27.1287 },
+    zoom: 11,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: true
+  });
+  directionsService = new google.maps.DirectionsService();
+  directionsRenderer = new google.maps.DirectionsRenderer({
+    map,
+    suppressMarkers: true, // kendi başlangıç/bitiş ikonlarımızı koyacağız
+    preserveViewport: false,
+    polylineOptions: { strokeColor: '#22d3ee', strokeWeight: 6, strokeOpacity: 0.95 }
+  });
+
+  // Kullanıcı konumu
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const p = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+      new google.maps.Marker({position:p, map, title:'Konumum'});
+    });
+  }
+
+  // Autocomplete
+  setupAutocomplete();
+}
+window.initMap = initMap;
+
+// ======= Özel ikonlar (SVG data URL) =======
+function svgURL(svg){ return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg); }
+function createIcon(svg, w, h, ax, ay){
+  return {
+    url: svgURL(svg),
+    scaledSize: new google.maps.Size(w,h),
+    anchor: new google.maps.Point(ax, ay)
+  };
+}
+const ICONS = {
+  start: (google)=> ({
+    url: 'data:image/svg+xml;utf8,'+encodeURIComponent(`
+    <svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'>
+      <circle cx='24' cy='20' r='12' fill='#06b6d4' stroke='#0ea5e9' stroke-width='2'/>
+      <path d='M24 32 L20 46 L24 42 L28 46 Z' fill='#06b6d4' opacity='0.9'/>
+    </svg>`),
+    scaledSize: new google.maps.Size(40, 40),
+    anchor: new google.maps.Point(20, 28)
+  }),
+  end: (google)=> ({
+    url: 'data:image/svg+xml;utf8,'+encodeURIComponent(`
+    <svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'>
+      <circle cx='24' cy='20' r='12' fill='#f97316' stroke='#fb923c' stroke-width='2'/>
+      <path d='M24 32 L20 46 L24 42 L28 46 Z' fill='#f97316' opacity='0.9'/>
+    </svg>`),
+    scaledSize: new google.maps.Size(40, 40),
+    anchor: new google.maps.Point(20, 28)
+  }),
+  chargeBig: (google)=> ({
+    url: 'data:image/svg+xml;utf8,'+encodeURIComponent(`
+    <svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>
+      <circle cx='32' cy='28' r='16' fill='#14b8a6' stroke='#0ea5e9' stroke-width='3'/>
+      <path d='M30 18 L22 34 L30 34 L26 46 L42 28 L34 28 L38 18 Z' fill='white'/>
+    </svg>`),
+    scaledSize: new google.maps.Size(54, 54),
+    anchor: new google.maps.Point(27, 38)
+  })
+};
+
+// Marka anahtarları
+const BRANDS = [
+  'Trugo','ZES','5 Şarj','Beefull','Sharz','Shell Recharge','GIOev','Otowatt','Otojet','WAT Mobilite','ChargeIQ'
+];
+const brandList = document.getElementById('brandList');
+function renderBrandList(filter=''){
+  brandList.innerHTML = '';
+  BRANDS.filter(n => n.toLowerCase().includes(filter.toLowerCase())).forEach(name=>{
+    const id = 'brand_' + slugTR(name);
+    const row = document.createElement('label');
+    row.className = 'flex items-center gap-2 px-2 py-1 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 cursor-pointer border border-slate-700';
+    row.innerHTML = `<input type="checkbox" id="${id}" checked class="accent-emerald-400"> <span>${name}</span>`;
+    brandList.appendChild(row);
+  });
+}
+document.getElementById('btnLayers').addEventListener('click',()=>{
+  document.getElementById('layerPanel').classList.toggle('hidden');
+});
+
+// === Station pricing (restored) ===
+const STATIONS = {
+  'Shell Recharge': [ {range:'30-60', price:13.5}, {range:'60-180', price:14.99} ],
+  'Trugo': [ {range:'30-120', price:10.6}, {range:'120-180', price:11.82} ],
+  'ZES': [ {range:'60-180', price:9.99}, {range:'180-480', price:12.99} ],
+  'Beefull': [ {range:'30-60', price:10.99}, {range:'60-380', price:12.99} ],
+  'Sharz': [ {range:'30-60', price:9.50}, {range:'60-400', price:11.00} ],
+  'Otowatt': [ {range:'40-60', price:11.49}, {range:'60-180', price:12.50} ],
+  'Otojet': [ {range:'30-180', price:12.00} ],
+  'WAT Mobilite': [ {range:'30-120', price:10.49}, {range:'120-180', price:11.79} ],
+  'GIOev': [ {range:'300', price:11.77} ],
+  '5 Şarj': [ {range:'30-180', price:11.00}, {range:'180-300', price:14.00} ],
+  'E-Şarj': [ {range:'<=90', price:12.90}, {range:'>90', price:13.70} ],
+};
+
+function fillStationBrands(){
+  const sel = document.getElementById('stationBrand');
+  if(!sel) return;
+  const brands = Object.keys(STATIONS);
+  sel.innerHTML = '<option value="">İstasyon seçin…</option>' +
+    brands.map(n=>`<option value="${n}">${n}</option>`).join('');
+}
+
+function onStationBrandChange(){
+  const brand = document.getElementById('stationBrand')?.value || '';
+  const pSel  = document.getElementById('stationPower');
+  const priceInput = document.getElementById('price');
+  if(pSel) pSel.innerHTML = '<option value="">Güç seçin…</option>';
+  if(!brand){ if(priceInput && priceInput.disabled===false) priceInput.value = ''; return; }
+  const bands = STATIONS[brand] || [];
+  bands.forEach(b=>{
+    const opt = document.createElement('option');
+    opt.value = b.range;
+    opt.textContent = b.range + ' kW';
+    pSel.appendChild(opt);
+  });
+  if(bands.length && priceInput && priceInput.disabled===true){ priceInput.value = bands[0].price; }
+}
+
+function onStationPowerChange(){
+  const brand = document.getElementById('stationBrand')?.value || '';
+  const band  = document.getElementById('stationPower')?.value || '';
+  const priceInput = document.getElementById('price');
+  if(!brand || !band || !priceInput) return;
+  const item = (STATIONS[brand]||[]).find(x=>x.range === band);
+  if(item && priceInput.disabled===true){ priceInput.value = item.price; }
+}
+// === End Station pricing ===
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  ['routeFrom','routeTo'].forEach(id=>{
+    const inp=document.getElementById(id); if(!inp) return;
+    inp.addEventListener('focus', ()=> setTimeout(()=>{
+      document.querySelectorAll('.pac-container').forEach(c=> c.style.zIndex = 10000);
+    }, 0));
+  });
+
+  try{ fillStationBrands(); }catch(e){}
+  try{ document.getElementById('stationBrand')?.addEventListener('change', onStationBrandChange); }catch(e){}
+  try{ document.getElementById('stationPower')?.addEventListener('change', onStationPowerChange); }catch(e){}
+  renderBrandList();
+  const s = document.getElementById('brandSearch');
+  s?.addEventListener('input', ()=> renderBrandList(s.value || ''));
+  document.getElementById('btnAll')?.addEventListener('click', ()=>{
+    brandList.querySelectorAll('input[type=checkbox]').forEach(cb=> cb.checked = true);
+  });
+  document.getElementById('btnNone')?.addEventListener('click', ()=>{
+    brandList.querySelectorAll('input[type=checkbox]').forEach(cb=> cb.checked = false);
+  });
+  // AC/DC pills toggle (şimdilik görsel)
+  const pillAC = document.getElementById('pillAC');
+  const pillDC = document.getElementById('pillDC');
+  [pillAC, pillDC].forEach(p=> p?.addEventListener('click', ()=> p.classList.toggle('ring-2')));
+});
+
+// ========= Rota & Autocomplete =========
+function haversineKm(p1, p2){
+  const R=6371; // km
+  const toRad = x => x*Math.PI/180;
+  const lat1 = p1.lat ? p1.lat() : p1.lat;
+  const lng1 = p1.lng ? p1.lng() : p1.lng;
+  const lat2 = p2.lat ? p2.lat() : p2.lat;
+  const lng2 = p2.lng ? p2.lng() : p2.lng;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+
+let fromAutocomplete, toAutocomplete;
+function setupAutocomplete(){
+  const fromInput = document.getElementById('routeFrom');
+  const toInput = document.getElementById('routeTo');
+  const opts = { componentRestrictions: { country: ['tr'] } };
+  fromAutocomplete = new google.maps.places.Autocomplete(fromInput, opts);
+  toAutocomplete = new google.maps.places.Autocomplete(toInput, opts);
+
+  [fromInput, toInput].forEach(inp=>{
+    inp.addEventListener('focus', ()=>{
+      setTimeout(()=>{
+        const containers = document.querySelectorAll('.pac-container');
+        containers.forEach(c=> c.style.zIndex = 10000);
+      }, 0);
+    });
+  });
+}
+
+async function drawRoute(){
+  try{
+    setAlerts(['Rota hesaplanıyor…']);
+    const aTxt = document.getElementById('routeFrom').value.trim();
+    const bTxt = document.getElementById('routeTo').value.trim();
+    if(!aTxt || !bTxt){ setAlerts(['Lütfen başlangıç ve bitiş girin.']); return; }
+
+    const req = {
+      origin: aTxt,
+      destination: bTxt,
+      travelMode: google.maps.TravelMode.DRIVING,
+      provideRouteAlternatives: false
+    };
+    directionsService.route(req, (res, status)=>{
+      if(status !== 'OK' || !res?.routes?.length){ setAlerts(['Rota bulunamadı.']); return; }
+      const route = res.routes[0];
+      directionsRenderer.setDirections(res);
+
+      
+  // Restore Places Autocomplete for address inputs
+  try {
+    const opts = { componentRestrictions: { country: ['tr'] } };
+    new google.maps.places.Autocomplete(document.getElementById('routeFrom'), opts);
+    new google.maps.places.Autocomplete(document.getElementById('routeTo'), opts);
+  } catch(e) { console.warn('Autocomplete init failed:', e); }
+// Özel başlangıç & bitiş marker'ları
+      const firstLeg = route.legs[0];
+      const lastLeg = route.legs[route.legs.length-1];
+      if(startMarker){ startMarker.setMap(null); }
+      if(endMarker){ endMarker.setMap(null); }
+      startMarker = new google.maps.Marker({
+        position: firstLeg.start_location,
+        map,
+        title: 'Başlangıç',
+        icon: ICONS.start(google)
+      });
+      endMarker = new google.maps.Marker({
+        position: lastLeg.end_location,
+        map,
+        title: 'Bitiş',
+        icon: ICONS.end(google)
+      });
+
+      // Toplam rota km (m -> km)
+      const totalMeters = route.legs.reduce((acc,leg)=> acc + (leg.distance?.value || 0), 0);
+      const totalKm = totalMeters / 1000;
+
+      // Güvenli menzil hesapla
+      const floor = Number(document.getElementById('batteryFloor').value || 0); // %
+      const wltp = CURRENT_WLTP || 320;
+      const safeKm = wltp * (1 - floor/100);
+
+      const alerts = [];
+      alerts.push(`Toplam rota: ${totalKm.toFixed(1)} km • Güvenli menzil (~%${100-floor}): ${safeKm.toFixed(1)} km.`);
+
+      // Özet polyline üzerinden birden fazla güvenli menzil noktası
+      // Eski tek marker yerine, rota boyunca her 'safeKm' mesafede bir ⚡ ekle
+      window.chargeMarkers.forEach(m=>m.setMap(null));
+      window.chargeMarkers=[];
+
+      const path = route.overview_path;
+      let cum=0;
+      for(let i=1;i<path.length;i++){
+        const seg = haversineKm(path[i-1], path[i]); // km
+        if(cum + seg >= safeKm){
+          const remain = safeKm - cum;
+          const ratio = Math.max(0, Math.min(1, remain / seg));
+          const lat = path[i-1].lat() + (path[i].lat()-path[i-1].lat())*ratio;
+          const lng = path[i-1].lng() + (path[i].lng()-path[i-1].lng())*ratio;
+          const marker = new google.maps.Marker({
+            position: {lat, lng},
+            map,
+            title: 'Şarj öneri noktası (yaklaşık)',
+            icon: ICONS.chargeBig(google)
+          });
+          window.chargeMarkers.push(marker);
+          alerts.push('~'+(cum+remain).toFixed(1)+' km civarında şarj önerisi.');
+          cum = 0; // yeni segmenti sıfırla
+        } else {
+          cum += seg;
+        }
+      }
+      if(!window.chargeMarkers.length){
+        alerts.push('Bu rota için teorik olarak şarja gerek yok.');
+      }
+      setAlerts(alerts);
+    });
+  }catch(err){
+    console.error(err);
+    setAlerts(['Rota hesaplanırken hata: '+ err.message]);
+  }
+}
+
+document.getElementById('btnRoute').addEventListener('click', drawRoute);
+document.getElementById('btnClear').addEventListener('click', ()=>{
+  directionsRenderer.set('directions', null);
+  if(safePtMarker){ safePtMarker.setMap(null); safePtMarker=null; }
+  if(startMarker){ startMarker.setMap(null); startMarker=null; }
+  if(endMarker){ endMarker.setMap(null); endMarker=null; }
+  setAlerts(['Uyarı yok.']);
+});
+
+// ========= Uyarı kutusu helper =========
+function setAlerts(lines){
+  const box = document.getElementById('routeAlerts');
+  box.innerHTML = '';
+  (lines && lines.length ? lines : ['Uyarı yok.']).forEach(t=>{
+    const d=document.createElement('div'); d.textContent=t; box.appendChild(d);
+  });
+}
+
+// ========= Slider label sync =========
+function bindSlider(id, lblId){
+  const el = document.getElementById(id);
+  const lbl = document.getElementById(lblId);
+  if(!el || !lbl) return;
+  const sync = ()=>{ lbl.textContent = '%' + (isNaN(el.value)? '0' : el.value); };
+  el.addEventListener('input', sync);
+  el.addEventListener('change', sync);
+  setTimeout(sync, 0);
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  bindSlider('ecStartSoc','ecStartVal');
+  bindSlider('ecTargetSoc','ecTargetVal');
+  bindSlider('socStart','socStartVal');
+  bindSlider('socTarget','socTargetVal');
+  bindSlider('kmPercent','kmPercentVal');
+  bindSlider('routeStart','routeStartVal');
+  bindSlider('routeEnd','routeEndVal');
+  bindSlider('batteryFloor','batteryFloorVal');
+
+  // Fiyat kilidi
+  const lockBtn = document.getElementById('priceLock');
+  const priceInput = document.getElementById('price');
+  if(lockBtn && priceInput){
+    priceInput.disabled = true;
+    lockBtn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      if(priceInput.disabled){ priceInput.disabled=false; lockBtn.textContent='🔓'; }
+      else { priceInput.disabled=true; lockBtn.textContent='🔒'; }
+    });
+  }
+
+  // İstasyon markaları
+  renderBrandList();
+});
+</script>
 </body>
 </html>
